@@ -18,22 +18,20 @@ public static partial class ExtensionMethod {
         }
         //List
         else if (nullableObj.GetType().GetProperty("Count") != null) {
-            dynamic castedObj = Convert.ChangeType(nullableObj, nullableObj.GetType());
-            if (castedObj.Count == 0) {
+            if (nullableObj.GetType().GetProperty("Count").GetValue(nullableObj, null).ToInt32() == 0) {
                 result = false;
             }
         }
         //Array
         else if (nullableObj.GetType().GetProperty("Length") != null) {
-            dynamic castedObj = Convert.ChangeType(nullableObj, nullableObj.GetType());
-            if (castedObj.Length == 0) {
+            if (nullableObj.GetType().GetProperty("Length").GetValue(nullableObj, null).ToInt32() == 0) {
                 result = false;
             }
         }
         else {
             //Linq Iterator
-            var isIterator = nullableObj.GetType().Name.Contains("Where") && nullableObj.GetType().Name.Contains("Iterator");
-            if (isIterator == true) {
+            var iterator = nullableObj.GetType().GetInterface("IEnumerable"); ;
+            if (iterator != null) {
                 dynamic castedObj = Convert.ChangeType(nullableObj, nullableObj.GetType());
 
                 result = false;
