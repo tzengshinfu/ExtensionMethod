@@ -5,6 +5,8 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Data.Entity;
+using System.Security.Cryptography;
+using System.Text;
 
 public static partial class ExtensionMethod {
     /// <summary>
@@ -356,5 +358,16 @@ public static partial class ExtensionMethod {
         GetChangeHistory = insertedMessages + Environment.NewLine + updatedMessages + Environment.NewLine + deletedMessages;
 
         return GetChangeHistory;
+    }
+
+    /// <summary>
+    /// 取得加密字串
+    /// </summary>
+    /// <param name="originalString"></param>
+    /// <returns></returns>
+    public static string GetEncryptionString(this string originalString) {
+        SHA256 crypto = new SHA256CryptoServiceProvider();
+
+        return Convert.ToBase64String(crypto.ComputeHash(Encoding.Default.GetBytes(originalString)));
     }
 }
