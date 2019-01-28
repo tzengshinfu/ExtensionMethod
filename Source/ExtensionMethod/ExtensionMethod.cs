@@ -34,6 +34,11 @@ public static partial class ExtensionMethod {
                 result = false;
             }
         }
+        //XmlNode
+        //只判斷本身有無值,不判斷子節點是否存在
+        else if (nullableObj.GetType().Module.Name == "System.Xml.dll") {
+            result = true;
+        }
         else {
             //Linq Iterator
             var iterator = nullableObj.GetType().GetInterface("IEnumerable"); ;
