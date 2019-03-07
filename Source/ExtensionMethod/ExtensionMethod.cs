@@ -34,10 +34,21 @@ public static partial class ExtensionMethod {
                 result = false;
             }
         }
-        //XmlNode
-        //只判斷本身有無值,不判斷子節點是否存在
+        //XmlElement
         else if (nullableObj.GetType().Module.Name == "System.Xml.dll") {
-            result = true;
+            XmlElement castedObj = (XmlElement)nullableObj;
+
+            if (castedObj.InnerXml.HasValue() == false) {
+                if (Array.TrueForAll<XmlAttribute>(castedObj.Attributes.Cast<XmlAttribute>().ToArray(), a => a.Value.HasValue() == false) == true) {
+                    return false;
+                }
+                else {
+                    return true;
+                }
+            }
+            else {
+                return true;
+            }
         }
         else {
             //Linq Iterator
