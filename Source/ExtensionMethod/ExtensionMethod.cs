@@ -36,10 +36,9 @@ public static partial class ExtensionMethod {
         }
         //XmlElement
         else if (nullableObj.GetType().Module.Name == "System.Xml.dll") {
-            XmlElement castedObj = (XmlElement)nullableObj;
-
-            if (castedObj.InnerXml.HasValue() == false) {
-                if (Array.TrueForAll<XmlAttribute>(castedObj.Attributes.Cast<XmlAttribute>().ToArray(), a => a.Value.HasValue() == false) == true) {
+            if (nullableObj.GetType() == typeof(XmlDocument)) {
+                var xmlDocObj = (XmlDocument)nullableObj;
+                if (xmlDocObj.InnerXml.HasValue() == false) {
                     return false;
                 }
                 else {
@@ -47,7 +46,18 @@ public static partial class ExtensionMethod {
                 }
             }
             else {
-                return true;
+                var xmlElDoc = (XmlElement)nullableObj;
+                if (xmlElDoc.InnerXml.HasValue() == false) {
+                    if (Array.TrueForAll<XmlAttribute>(xmlElDoc.Attributes.Cast<XmlAttribute>().ToArray(), a => a.Value.HasValue() == false) == true) {
+                        return false;
+                    }
+                    else {
+                        return true;
+                    }
+                }
+                else {
+                    return true;
+                }
             }
         }
         else {
