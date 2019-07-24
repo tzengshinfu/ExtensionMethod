@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net;
-using System.Reflection;
-using System.Data.Entity;
 using System.Security.Cryptography;
 using System.Text;
+using System.Xml;
 
 public static partial class ExtensionMethod {
     /// <summary>
@@ -84,7 +83,7 @@ public static partial class ExtensionMethod {
         return result;
     }
 
-    public static bool HasNoValue(this object obj) {
+    public static bool NoValue(this object obj) {
         return obj.HasValue() ? false : true;
     }
 
@@ -154,23 +153,13 @@ public static partial class ExtensionMethod {
     /// <param name="dic"></param>
     /// <param name="key"></param>
     /// <param name="value"></param>
-    public static void AddOrUpdate<TKey, TValue>(this Dictionary<TKey, TValue> dic, TKey key, TValue value) {
+    public static void Merge<TKey, TValue>(this Dictionary<TKey, TValue> dic, TKey key, TValue value) {
         if (dic.ContainsKey(key)) {
             dic[key] = value;
         }
         else {
             dic.Add(key, value);
         }
-    }
-
-    /// <summary>
-    /// 文字分割成純陣列(去除僅空白字元及無內容項目)
-    /// </summary>
-    /// <param name="text"></param>
-    /// <param name="separator"></param>
-    /// <returns></returns>
-    public static string[] ToCleanArray(this string text, char separator) {
-        return Array.ConvertAll(text.Split(new char[] { separator }, StringSplitOptions.RemoveEmptyEntries), array => array.Trim());
     }
 
     /// <summary>
@@ -262,42 +251,6 @@ public static partial class ExtensionMethod {
     }
 
     /// <summary>
-    /// 取得Function名稱
-    /// </summary>
-    /// <returns></returns>
-    public static string GetFunctionName(this object obj) {
-        var currentMethod = new StackTrace(true).GetFrame(1).GetMethod();
-        var typeName = currentMethod.DeclaringType.Name;
-        var methodName = currentMethod.Name;
-
-        return typeName + "." + methodName;
-    }
-
-    /// <summary>
-    /// 取得Function參數, 參數數量及順序必須與叫用方法相同, 否則無法取得內容
-    /// </summary>
-    /// <returns></returns>
-    /// https://stackoverflow.com/questions/135782/generic-logging-of-function-parameters-in-exception-handling
-    public static string GetFunctionParameters(this object obj, params object[] values) {
-        var result = "";
-
-        var currentMethod = new StackTrace(true).GetFrame(1).GetMethod();
-
-        ParameterInfo[] parameters = currentMethod.GetParameters();
-        if (values.Length == parameters.Length) {
-            for (int currentParamIndex = 0; currentParamIndex < parameters.Length; currentParamIndex++) {
-                if (values[currentParamIndex].GetType().Name == "UserToken") {
-                    continue;
-                }
-
-                result += (currentParamIndex == 0 ? "" : ",") + "[" + parameters[currentParamIndex].Name + "]" + "=" + "{" + values[currentParamIndex].ToStringOrDefault("null") + "}";
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
     /// 取得Client端Ip Address(單元測試則改取本機Ip Address)
     /// </summary>
     /// <returns></returns>
@@ -306,94 +259,78 @@ public static partial class ExtensionMethod {
     }
 
     /// <summary>
-    /// 轉成附加索引的IEnumerable物件供foreach時使用, 用法:var (item, index) in items.WithIndex()
+    /// 回傳附加索引子的元組集合(元項item1為來源集合的項目,item2為索引)
     /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="self"></param>
-    /// <returns></returns>
-    /// https://stackoverflow.com/questions/43021/how-do-you-get-the-index-of-the-current-iteration-of-a-foreach-loop/39997157#39997157
-    public static IEnumerable<(T Item, int Index)> WithIndex<T>(this IEnumerable<T> self) {
-        return self.Select((item, index) => (item, index));
+    /// <param name="enumerable">來源集合</param>
+    /// <returns>附加索引子的元組集合</returns>
+    public static IEnumerable<Tuple<T, int>> AppendIndex<T>(this IEnumerable<T> enumerable) {
+        return enumerable.Select((item, index) => Tuple.Create(item, index));
     }
 
     /// <summary>
-    /// 取得EntityFramework新增/修改/刪除的紀錄(需在SaveChanges方法前執行才可取得)
+    /// 字串加密(非對稱式)
     /// </summary>
-    /// <param name="database"></param>
-    /// <returns></returns>
-    public static string GetChangeHistory(this DbContext database) {
-        #region 新增紀錄
-        var insertedMessages = "";
-        database.ChangeTracker.Entries().Where(record => record.State == EntityState.Added).ToList()
-        .ForEach(record => {
-            var tableName = record.Entity.GetType().Name;
-            var columns = record.Entity.GetType().GetProperties();
+    /// <param name="Source">加密前字串</param>
+    /// <param name="cryptoKey">加密金鑰</param>
+    /// <returns>加密後字串</returns>
+    public static string Encrypt(this string sourceString, string cryptoKey) {
+        string result = "";
 
-            foreach (var column in columns) {
-                var columnName = column.Name;
-                var value = column.GetValue(record.Entity, null).ToStringOrDefault("null");
+        try {
+            AesCryptoServiceProvider aes = new AesCryptoServiceProvider();
+            MD5CryptoServiceProvider md5 = new MD5CryptoServiceProvider();
+            SHA256CryptoServiceProvider sha256 = new SHA256CryptoServiceProvider();
+            byte[] key = sha256.ComputeHash(Encoding.UTF8.GetBytes(cryptoKey));
+            byte[] iv = md5.ComputeHash(Encoding.UTF8.GetBytes(cryptoKey));
+            aes.Key = key;
+            aes.IV = iv;
 
-                insertedMessages += Environment.NewLine + "." + "[" + columnName + "]" + "=" + "{" + value + "}";
+            byte[] dataByteArray = Encoding.UTF8.GetBytes(sourceString);
+            using (MemoryStream ms = new MemoryStream())
+            using (CryptoStream cs = new CryptoStream(ms, aes.CreateEncryptor(), CryptoStreamMode.Write)) {
+                cs.Write(dataByteArray, 0, dataByteArray.Length);
+                cs.FlushFinalBlock();
+                result = Convert.ToBase64String(ms.ToArray());
             }
+        }
+        catch (Exception e) {
+            throw e;
+        }
 
-            insertedMessages = "[" + tableName + "]" + insertedMessages;
-        });
-        insertedMessages = "inserted records: " + Environment.NewLine + insertedMessages;
-        #endregion
-
-        #region 修改紀錄
-        var updatedMessages = "";
-        database.ChangeTracker.Entries().Where(record => record.State == EntityState.Modified).ToList()
-           .ForEach(record => {
-               var tableName = record.Entity.GetType().Name;
-
-               foreach (var columnName in record.OriginalValues.PropertyNames) {
-                   var originalValue = record.OriginalValues[columnName].ToStringOrDefault("null");
-                   var currentValue = record.CurrentValues[columnName].ToStringOrDefault("null");
-
-                   if (currentValue != originalValue) {
-                       updatedMessages += Environment.NewLine + "." + "[" + columnName + "]" + "=" + "{" + originalValue + "→" + currentValue + "}";
-                   }
-               }
-
-               updatedMessages = "[" + tableName + "]" + updatedMessages;
-           });
-        updatedMessages = "updated records: " + Environment.NewLine + updatedMessages;
-        #endregion
-
-        #region 刪除紀錄
-        var deletedMessages = "";
-        database.ChangeTracker.Entries().Where(record => record.State == EntityState.Deleted).ToList()
-            .ForEach(record => {
-                var tableName = record.Entity.GetType().Name;
-                var columns = record.Entity.GetType().GetProperties();
-
-                foreach (var column in columns) {
-                    var columnName = column.Name;
-                    var value = column.GetValue(record.Entity, null).ToStringOrDefault("null");
-                    deletedMessages += Environment.NewLine + "." + "[" + columnName + "]" + "=" + "{" + value + "}";
-                }
-
-                deletedMessages = "[" + tableName + "]" + deletedMessages;
-
-            });
-        deletedMessages = "deleted records: " + Environment.NewLine + deletedMessages;
-        #endregion
-
-        var GetChangeHistory = "";
-        GetChangeHistory = insertedMessages + Environment.NewLine + updatedMessages + Environment.NewLine + deletedMessages;
-
-        return GetChangeHistory;
+        return result;
     }
 
     /// <summary>
-    /// 取得加密字串
+    /// 字串解密(非對稱式)
     /// </summary>
-    /// <param name="originalString"></param>
-    /// <returns></returns>
-    public static string GetEncryptionString(this string originalString) {
-        SHA256 crypto = new SHA256CryptoServiceProvider();
+    /// <param name="Source">解密前字串</param>
+    /// <param name="cryptoKey">解密金鑰</param>
+    /// <returns>解密後字串</returns>
+    public static string Decrypt(this string sourceString, string cryptoKey) {
+        string result = "";
 
-        return Convert.ToBase64String(crypto.ComputeHash(Encoding.Default.GetBytes(originalString)));
+        try {
+            AesCryptoServiceProvider aes = new AesCryptoServiceProvider();
+            MD5CryptoServiceProvider md5 = new MD5CryptoServiceProvider();
+            SHA256CryptoServiceProvider sha256 = new SHA256CryptoServiceProvider();
+            byte[] key = sha256.ComputeHash(Encoding.UTF8.GetBytes(cryptoKey));
+            byte[] iv = md5.ComputeHash(Encoding.UTF8.GetBytes(cryptoKey));
+            aes.Key = key;
+            aes.IV = iv;
+
+            byte[] dataByteArray = Convert.FromBase64String(sourceString);
+            using (MemoryStream ms = new MemoryStream()) {
+                using (CryptoStream cs = new CryptoStream(ms, aes.CreateDecryptor(), CryptoStreamMode.Write)) {
+                    cs.Write(dataByteArray, 0, dataByteArray.Length);
+                    cs.FlushFinalBlock();
+                    result = Encoding.UTF8.GetString(ms.ToArray());
+                }
+            }
+        }
+        catch (Exception e) {
+            throw e;
+        }
+
+        return result;
     }
 }
