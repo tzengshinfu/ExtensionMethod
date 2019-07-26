@@ -259,12 +259,18 @@ public static partial class ExtensionMethod {
     }
 
     /// <summary>
-    /// 回傳附加索引子的元組集合(元項item1為來源集合的項目,item2為索引)
+    /// 回傳附加索引子的物件集合
     /// </summary>
     /// <param name="enumerable">來源集合</param>
-    /// <returns>附加索引子的元組集合</returns>
-    public static IEnumerable<Tuple<T, int>> AppendIndex<T>(this IEnumerable<T> enumerable) {
-        return enumerable.Select((item, index) => Tuple.Create(item, index));
+    /// <returns>附加索引子的物件集合(Item=物件/Index=索引/No=項次=索引+1)</returns>
+    public static IEnumerable<ItemIndex<T>> AppendIndex<T>(this IEnumerable<T> enumerable) {
+        return enumerable.Select((item, index) => new ItemIndex<T> { Item = item, Index = index, No = index + 1 });
+    }
+
+    public struct ItemIndex<T> {
+        public T Item;
+        public int Index;
+        public int No;
     }
 
     /// <summary>
